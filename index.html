@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Finanze Pro - Smart Search</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="apple-touch-icon" href="icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .active-scale:active { transform: scale(0.97); }
+        .app-container { min-height: 100vh; padding-bottom: env(safe-area-inset-bottom); }
+        .modal-overlay { background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); }
+        .fade-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .responsive-width { width: 100%; max-width: 1200px; margin-left: auto; margin-right: auto; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+    <div id="modal-debito" class="hidden fixed inset-0 z-[100] modal-overlay flex items-end sm:items-center justify-center p-4 text-left text-slate-900">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-fade-in border border-slate-100">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h3 class="text-xl font-black italic uppercase">Dettaglio Debito</h3>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Analisi rate ricerca attuale</p>
+                </div>
+                <button onclick="closeDebitoModal()" class="w-10 h-10 flex items-center justify-center bg-slate-50 rounded-full text-slate-400"><i data-lucide="x"></i></button>
+            </div>
+            <div id="lista-debiti-dettaglio" class="space-y-4 max-h-[55vh] overflow-y-auto no-scrollbar"></div>
+            <button onclick="closeDebitoModal()" class="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-bold active-scale">Chiudi</button>
+        </div>
+    </div>
+
+    <div id="auth-view" class="flex items-center justify-center min-h-screen p-6">
+        <div class="w-full max-w-sm bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100 text-center">
+            <h1 id="app-title-trigger" class="text-3xl font-black text-blue-600 mb-8 cursor-pointer italic tracking-tighter uppercase">Finanze Pro</h1>
+            <div class="space-y-4">
+                <input type="email" id="email" placeholder="Email" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-medium ring-1 ring-slate-100 focus:ring-blue-500">
+                <input type="password" id="pass" placeholder="Password" class="w-full p-4 bg-slate-50 rounded-2xl outline-none font-medium ring-1 ring-slate-100 focus:ring-blue-500">
+                <button onclick="handleAuth('login')" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg active-scale">Accedi</button>
+                <button onclick="resetPassword()" class="text-[11px] font-bold text-slate-400 hover:text-blue-600 uppercase tracking-tight">Recupero Password</button>
+                <button id="btn-register-hidden" onclick="handleAuth('register')" class="hidden w-full py-4 text-blue-600 border-2 border-blue-600 rounded-2xl font-bold active-scale mt-4">Registrati</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-view" class="hidden app-container px-4 sm:px-8">
+        <div class="responsive-width">
+            <header class="flex justify-between items-center py-6">
+                <div class="text-left">
+                    <h2 class="text-2xl font-black text-slate-800 italic uppercase leading-none">Dashboard</h2>
+                    <p id="current-date" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1"></p>
+                </div>
+                <button onclick="logout()" class="w-12 h-12 flex items-center justify-center bg-white rounded-2xl shadow-sm text-slate-400 active-scale border border-slate-100"><i data-lucide="log-out"></i></button>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6 text-left">
+                <div class="lg:col-span-2 bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden flex flex-col justify-center min-h-[160px]">
+                    <div class="relative z-10">
+                        <p class="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Capitale Disponibile</p>
+                        <h3 id="txt-residuo" class="text-4xl sm:text-6xl font-black italic tracking-tighter">€ 0,00</h3>
+                    </div>
+                    <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-blue-600 opacity-20 rounded-full blur-3xl"></div>
+                </div>
+
+                <div class="grid grid-cols-2 lg:grid-cols-1 gap-4">
+                    <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-center">
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Spesa Sommata</p>
+                        <h4 id="txt-uscite-filtrate" class="text-xl font-bold text-slate-700">€ 0,00</h4>
+                    </div>
+                    <div onclick="openDebitoModal()" id="box-debito" class="bg-orange-50 p-6 rounded-[2rem] border border-orange-100 shadow-sm transition-all duration-300 opacity-50 cursor-default flex flex-col justify-center">
+                        <p class="text-[9px] font-black text-orange-400 uppercase tracking-widest mb-1">Debito Residuo</p>
+                        <h4 id="txt-debito-filtrato" class="text-xl font-bold text-orange-600">€ 0,00</h4>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center">
+                    <div class="relative w-full">
+                        <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300"></i>
+                        <input type="text" id="search-input" oninput="renderUI()" placeholder="Cerca beneficiario, causale, tipo..." class="w-full p-3 pl-11 bg-slate-50 rounded-xl text-xs font-medium outline-none ring-1 ring-slate-100 focus:ring-blue-500 transition-all">
+                    </div>
+                </div>
+                <button onclick="exportToPDF()" class="bg-emerald-600 text-white px-6 py-4 rounded-2xl text-xs font-black active-scale uppercase shadow-lg flex items-center justify-center gap-2">
+                    <i data-lucide="file-down" class="w-4 h-4"></i> Esporta Report PDF
+                </button>
+            </div>
+
+            <details class="group mb-12" id="form-details">
+                <summary onclick="initFormTime()" class="list-none bg-blue-600 text-white p-5 rounded-[2rem] font-bold text-center cursor-pointer active-scale shadow-xl flex items-center justify-center gap-3">
+                    <i data-lucide="plus-circle" class="w-6 h-6"></i> REGISTRA NUOVO MOVIMENTO
+                </summary>
+                <div class="bg-white p-6 sm:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 mt-4 text-left grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-4">
+                        <label class="block text-[10px] font-black text-slate-400 uppercase ml-2">Dati Transazione</label>
+                        <input type="datetime-local" id="input-date" class="w-full p-4 bg-slate-50 rounded-xl outline-none ring-1 ring-slate-100 font-bold text-sm">
+                        <div class="grid grid-cols-2 gap-3">
+                            <select id="input-type" onchange="toggleSpeseVarie(this.value)" class="p-4 bg-slate-50 rounded-xl font-bold outline-none ring-1 ring-slate-100 text-xs uppercase">
+                                <option value="Bonifico">Bonifico</option>
+                                <option value="Bollettino">Bollettino</option>
+                                <option value="Spese Varie">Spese Varie</option>
+                            </select>
+                            <input type="number" id="input-amount" placeholder="Importo €" class="p-4 bg-slate-50 rounded-xl font-bold outline-none ring-1 ring-slate-100">
+                        </div>
+                        <div id="sub-spese-container" class="hidden space-y-3 animate-fade-in">
+                            <select id="sub-type-spese" onchange="toggleAltroSpec(this.value)" class="w-full p-4 bg-blue-50 rounded-xl font-bold outline-none ring-2 ring-blue-100 text-xs uppercase text-blue-700">
+                                <option value="Benzina">Benzina</option>
+                                <option value="Abbigliamento">Abbigliamento</option>
+                                <option value="Cibo">Cibo</option>
+                                <option value="Altro">Altro...</option>
+                            </select>
+                            <input type="text" id="input-altro-spec" placeholder="Specifica spesa..." class="hidden w-full p-4 bg-white rounded-xl outline-none ring-1 ring-blue-200 font-bold text-sm">
+                        </div>
+                        <div class="relative">
+                            <input type="text" id="input-to" oninput="checkAutoFill(this.value)" placeholder="Beneficiario" class="w-full p-4 bg-slate-50 rounded-xl outline-none ring-1 ring-slate-100 font-bold">
+                            <div id="autofill-suggestion" class="hidden absolute left-0 right-0 top-full mt-2 p-3 bg-blue-700 text-white rounded-xl z-50 text-[10px] flex justify-between items-center border-2 border-white shadow-xl">
+                                <p id="suggestion-hint" class="font-bold"></p>
+                                <button onclick="applyAutoFill()" class="bg-white text-blue-700 px-3 py-1.5 rounded-lg font-black uppercase">Applica</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <label class="block text-[10px] font-black text-slate-400 uppercase ml-2">Dettagli e Rateazione</label>
+                        <input type="text" id="input-iban" placeholder="IBAN (opzionale)" class="w-full p-4 bg-slate-50 rounded-xl font-mono uppercase outline-none ring-1 ring-slate-100 text-xs">
+                        <input type="text" id="input-causale" placeholder="Causale" class="w-full p-4 bg-slate-50 rounded-xl outline-none ring-1 ring-slate-100 text-sm">
+                        <div class="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl">
+                            <div>
+                                <p class="text-[8px] font-black text-slate-400 uppercase text-center mb-1">Rata Attuale</p>
+                                <input type="number" id="input-rate-done" value="1" class="w-full p-2 bg-white rounded-lg text-center font-bold outline-none ring-1 ring-slate-200">
+                            </div>
+                            <div>
+                                <p class="text-[8px] font-black text-slate-400 uppercase text-center mb-1">Totali</p>
+                                <input type="number" id="input-rate-total" value="1" class="w-full p-2 bg-white rounded-lg text-center font-bold outline-none ring-1 ring-slate-200">
+                            </div>
+                        </div>
+                        <button onclick="addTransaction()" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold active-scale uppercase tracking-widest mt-2 shadow-lg">Conferma Transazione</button>
+                    </div>
+                </div>
+            </details>
+
+            <div class="mb-6 text-left">
+                <h4 class="font-black text-slate-800 uppercase text-xs tracking-widest flex items-center gap-2 mb-6">
+                    <i data-lucide="list" class="w-4 h-4"></i> Cronologia Movimenti
+                </h4>
+                <div id="history-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </div>
+
+            <footer class="mt-20 border-t border-slate-200 py-10">
+                <details class="group">
+                    <summary class="list-none text-center text-slate-300 text-[10px] font-bold cursor-pointer uppercase tracking-widest">Impostazioni Avanzate</summary>
+                    <div class="max-w-4xl mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                        <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm text-left">
+                            <label class="text-[9px] font-black text-slate-400 uppercase ml-1">Configura Capitale Iniziale</label>
+                            <div class="flex gap-2 mt-2">
+                                <input type="number" id="conf-capitale" class="flex-1 p-4 bg-slate-50 rounded-xl outline-none ring-1 ring-slate-100 font-bold">
+                                <button onclick="saveConfig()" class="px-6 bg-slate-900 text-white rounded-xl font-bold active-scale uppercase text-xs">Salva</button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="downloadBackup()" class="flex flex-col items-center justify-center p-4 bg-blue-50 text-blue-600 rounded-3xl text-[10px] font-black uppercase gap-2"><i data-lucide="download"></i> Backup</button>
+                            <label class="flex flex-col items-center justify-center p-4 bg-emerald-50 text-emerald-600 rounded-3xl text-[10px] font-black uppercase cursor-pointer gap-2">
+                                <i data-lucide="upload"></i> Carica <input type="file" class="hidden" onchange="importBackup(this)">
+                            </label>
+                            <button onclick="secureClear('local')" class="col-span-2 py-4 text-orange-500 bg-orange-50 rounded-3xl text-[9px] font-black uppercase">Pulisci Cache Locale</button>
+                            <button onclick="secureClear('all')" class="col-span-2 py-4 text-white bg-rose-600 rounded-3xl text-[9px] font-black uppercase shadow-lg shadow-rose-200">Reset Totale Cloud</button>
+                        </div>
+                    </div>
+                </details>
+            </footer>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCTcN-4iQAHkl_ucVXbys4bFOSmJhW9QYY",
+            authDomain: "gestione-finanze-f6c62.firebaseapp.com",
+            projectId: "gestione-finanze-f6c62",
+            storageBucket: "gestione-finanze-f6c62.firebasestorage.app",
+            messagingSenderId: "706366755258",
+            appId: "1:706366755258:web:e098573248965b05434d83"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth(), db = firebase.firestore();
+
+        let userId = null, localData = { config: { capitale: 0 }, storico: [] };
+        const MACRO_PWD = "PRO2026";
+        let currentAutoFillData = null;
+
+        document.getElementById('app-title-trigger').addEventListener('click', () => {
+            if(prompt("Codice Amministratore:") === MACRO_PWD) document.getElementById('btn-register-hidden').classList.remove('hidden');
+        });
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                userId = user.uid;
+                document.getElementById('auth-view').classList.add('hidden');
+                document.getElementById('app-view').classList.remove('hidden');
+                db.collection('users').doc(userId).onSnapshot(doc => { if (doc.exists) { localData = doc.data(); renderUI(); } });
+            } else {
+                document.getElementById('auth-view').classList.remove('hidden');
+                document.getElementById('app-view').classList.add('hidden');
+            }
+            lucide.createIcons();
+        });
+
+        function toggleSpeseVarie(val) { document.getElementById('sub-spese-container').classList.toggle('hidden', val !== 'Spese Varie'); }
+        function toggleAltroSpec(val) { document.getElementById('input-altro-spec').classList.toggle('hidden', val !== 'Altro'); }
+
+        function checkAutoFill(val) {
+            const suggestionBox = document.getElementById('autofill-suggestion');
+            if (val.length < 2) { suggestionBox.classList.add('hidden'); return; }
+            const match = localData.storico.find(x => x.beneficiario.toLowerCase().trim() === val.toLowerCase().trim());
+            if (match) {
+                currentAutoFillData = match;
+                document.getElementById('suggestion-hint').innerText = `Trovata rata prec: ${match.ratePagate}/${match.rateTotali}`;
+                suggestionBox.classList.remove('hidden');
+            } else suggestionBox.classList.add('hidden');
+        }
+
+        function applyAutoFill() {
+            if (currentAutoFillData) {
+                document.getElementById('input-iban').value = currentAutoFillData.iban || '';
+                document.getElementById('input-type').value = currentAutoFillData.tipo_originale || 'Bonifico';
+                document.getElementById('input-amount').value = currentAutoFillData.importo || '';
+                document.getElementById('input-rate-total').value = currentAutoFillData.rateTotali || 1;
+                document.getElementById('input-rate-done').value = currentAutoFillData.ratePagate < currentAutoFillData.rateTotali ? currentAutoFillData.ratePagate + 1 : currentAutoFillData.ratePagate;
+                document.getElementById('autofill-suggestion').classList.add('hidden');
+                toggleSpeseVarie(currentAutoFillData.tipo_originale);
+            }
+        }
+
+        function renderUI() {
+            const search = document.getElementById('search-input').value.toLowerCase().trim();
+            const boxDebito = document.getElementById('box-debito');
+            
+            const filteredData = localData.storico.filter(x => 
+                x.beneficiario.toLowerCase().includes(search) || 
+                (x.causale && x.causale.toLowerCase().includes(search)) ||
+                x.tipo.toLowerCase().includes(search)
+            );
+
+            const totaleSpesoMostrato = search === "" 
+                ? localData.storico.reduce((acc, x) => acc + x.importo, 0)
+                : filteredData.reduce((acc, x) => acc + x.importo, 0);
+
+            let totaleDebitoRicerca = 0;
+            if (search !== "") {
+                const raggruppamentoDebito = {};
+                filteredData.forEach(op => {
+                    const key = `${op.beneficiario.toUpperCase().trim()}-${op.tipo.toUpperCase().trim()}`;
+                    if (!raggruppamentoDebito[key] || op.id > raggruppamentoDebito[key].id) {
+                        raggruppamentoDebito[key] = (op.rateTotali - op.ratePagate) * op.importo;
+                    }
+                });
+                totaleDebitoRicerca = Object.values(raggruppamentoDebito).reduce((acc, val) => acc + val, 0);
+                boxDebito.classList.remove('opacity-50', 'cursor-default');
+                boxDebito.classList.add('opacity-100', 'cursor-pointer', 'active-scale');
+            } else {
+                boxDebito.classList.add('opacity-50', 'cursor-default');
+                boxDebito.classList.remove('opacity-100', 'cursor-pointer', 'active-scale');
+            }
+
+            const saldoAttuale = localData.config.capitale - localData.storico.reduce((acc, x) => acc + x.importo, 0);
+
+            document.getElementById('txt-residuo').innerText = "€ " + saldoAttuale.toLocaleString('it-IT', {minimumFractionDigits:2});
+            document.getElementById('txt-uscite-filtrate').innerText = "€ " + totaleSpesoMostrato.toLocaleString('it-IT', {minimumFractionDigits:2});
+            document.getElementById('txt-debito-filtrato').innerText = "€ " + totaleDebitoRicerca.toLocaleString('it-IT', {minimumFractionDigits:2});
+            document.getElementById('current-date').innerText = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+
+            document.getElementById('history-list').innerHTML = (search === "" ? localData.storico : filteredData).map(x => `
+                <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm text-left fade-in">
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="pr-2">
+                            <span class="text-[7px] font-black text-white bg-slate-900 px-2 py-0.5 rounded uppercase">${x.tipo}</span>
+                            <h5 class="font-black text-slate-800 text-lg uppercase mt-1 leading-tight break-words">${x.beneficiario}</h5>
+                            <p class="text-[9px] font-bold text-slate-400 mt-0.5">${x.dataVisuale}</p>
+                            ${x.causale ? `<p class="text-[10px] font-medium text-slate-500 italic mt-2 leading-tight border-l-2 border-slate-100 pl-2">"${x.causale}"</p>` : ''}
+                        </div>
+                        <div class="text-right flex flex-col items-end">
+                            <p class="font-black text-xl text-slate-900 tracking-tighter">-€${x.importo.toFixed(2)}</p>
+                            <button onclick="deleteRow(${x.id})" class="text-slate-200 hover:text-rose-500 mt-2 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 pt-4 border-t border-slate-50 text-center">
+                        <div class="bg-slate-50/50 p-2 rounded-xl">
+                            <p class="text-[7px] font-black text-slate-400 uppercase mb-0.5">Stato Rate</p>
+                            <p class="text-[10px] font-black text-slate-800">${x.ratePagate}/${x.rateTotali}</p>
+                        </div>
+                        <div class="bg-slate-50/50 p-2 rounded-xl">
+                            <p class="text-[7px] font-black text-slate-400 uppercase mb-0.5">Residuo Voce</p>
+                            <p class="text-[10px] font-black ${x.rateTotali - x.ratePagate > 0 ? 'text-orange-600' : 'text-emerald-600'}">€ ${((x.rateTotali - x.ratePagate) * x.importo).toFixed(2)}</p>
+                        </div>
+                    </div>
+                </div>`).join('');
+            lucide.createIcons();
+        }
+
+        function openDebitoModal() {
+            const search = document.getElementById('search-input').value.toLowerCase().trim();
+            if (search === "") return;
+            const container = document.getElementById('lista-debiti-dettaglio');
+            const filteredData = localData.storico.filter(x => 
+                x.beneficiario.toLowerCase().includes(search) || 
+                (x.causale && x.causale.toLowerCase().includes(search)) ||
+                x.tipo.toLowerCase().includes(search)
+            );
+            const raggruppamentoDebito = {};
+            filteredData.forEach(op => {
+                const key = `${op.beneficiario.toUpperCase().trim()} (${op.tipo.toUpperCase()})`;
+                if (!raggruppamentoDebito[key] || op.id > raggruppamentoDebito[key].id) {
+                    raggruppamentoDebito[key] = {
+                        residuo: (op.rateTotali - op.ratePagate) * op.importo,
+                        pagate: op.ratePagate,
+                        totali: op.rateTotali,
+                        mancanti: op.rateTotali - op.ratePagate
+                    };
+                }
+            });
+            const debitiAttivi = Object.entries(raggruppamentoDebito).filter(([_, v]) => v.residuo > 0);
+            if (debitiAttivi.length === 0) container.innerHTML = '<p class="text-center py-4 italic text-slate-400">Nessun debito attivo per questa ricerca.</p>';
+            else {
+                container.innerHTML = debitiAttivi.map(([name, data]) => `
+                    <div class="bg-slate-50 p-4 rounded-2xl flex justify-between items-center border border-orange-100">
+                        <div class="pr-4">
+                            <p class="font-black text-slate-800 text-[10px] uppercase break-words">${name}</p>
+                            <p class="text-[9px] font-bold text-slate-400 uppercase">Rate: ${data.pagate}/${data.totali} (Mancano ${data.mancanti})</p>
+                        </div>
+                        <div class="text-right whitespace-nowrap">
+                             <p class="text-orange-600 font-black">€ ${data.residuo.toFixed(2)}</p>
+                        </div>
+                    </div>`).join('');
+            }
+            document.getElementById('modal-debito').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeDebitoModal() { document.getElementById('modal-debito').classList.add('hidden'); }
+
+        async function addTransaction() {
+            const dInput = document.getElementById('input-date').value;
+            const d = dInput ? new Date(dInput) : new Date();
+            const mainType = document.getElementById('input-type').value;
+            let finalType = mainType;
+            if (mainType === 'Spese Varie') {
+                const sub = document.getElementById('sub-type-spese').value;
+                finalType = sub === 'Altro' ? document.getElementById('input-altro-spec').value : sub;
+            }
+
+            if (!document.getElementById('input-amount').value || !document.getElementById('input-to').value) {
+                alert("Importo e Beneficiario obbligatori!");
+                return;
+            }
+
+            localData.storico.unshift({
+                id: Date.now(),
+                dataISO: d.toISOString(),
+                dataVisuale: d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}),
+                importo: parseFloat(document.getElementById('input-amount').value) || 0,
+                tipo: finalType.toUpperCase(),
+                tipo_originale: mainType,
+                beneficiario: document.getElementById('input-to').value,
+                iban: document.getElementById('input-iban').value.toUpperCase(),
+                causale: document.getElementById('input-causale').value,
+                ratePagate: parseInt(document.getElementById('input-rate-done').value) || 1,
+                rateTotali: parseInt(document.getElementById('input-rate-total').value) || 1
+            });
+            await db.collection('users').doc(userId).set(localData);
+            document.getElementById('form-details').removeAttribute('open');
+            document.getElementById('input-amount').value = '';
+            document.getElementById('input-to').value = '';
+            document.getElementById('input-causale').value = '';
+        }
+
+        async function secureClear(m) {
+            if(prompt("Password Amministratore:") !== MACRO_PWD) return;
+            if(m === 'all') {
+                if(confirm("Sei sicuro di voler cancellare tutto dal CLOUD?")) {
+                    await db.collection('users').doc(userId).set({ config: { capitale: 0 }, storico: [] });
+                }
+            } else { await db.terminate(); await db.clearPersistence(); }
+            location.reload();
+        }
+
+        function logout() { auth.signOut(); }
+        async function handleAuth(t) {
+            const e = document.getElementById('email').value, p = document.getElementById('pass').value;
+            if(!e || !p) { alert("Inserisci email e password"); return; }
+            try { t === 'login' ? await auth.signInWithEmailAndPassword(e, p) : await auth.createUserWithEmailAndPassword(e, p); } catch (err) { alert(err.message); }
+        }
+        async function resetPassword() {
+            const email = document.getElementById('email').value;
+            if (!email) return alert("Inserisci l'email per il recupero");
+            try { await auth.sendPasswordResetEmail(email); alert("Email di recupero inviata!"); } catch (err) { alert(err.message); }
+        }
+        function initFormTime() { const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); document.getElementById('input-date').value = now.toISOString().slice(0,16); }
+        async function deleteRow(id) { if(prompt("Conferma Password Operazione:") === MACRO_PWD) { localData.storico = localData.storico.filter(x => x.id !== id); await db.collection('users').doc(userId).set(localData); } }
+        async function saveConfig() { localData.config.capitale = parseFloat(document.getElementById('conf-capitale').value) || 0; await db.collection('users').doc(userId).set(localData); alert("Capitale aggiornato."); }
+        function downloadBackup() { const blob = new Blob([JSON.stringify(localData, null, 2)], { type: "application/json" }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Backup_Finanze.json`; a.click(); }
+        function importBackup(input) { const reader = new FileReader(); reader.onload = async (e) => { const data = JSON.parse(e.target.result); if(data.storico && prompt("Password Importazione:") === MACRO_PWD) { await db.collection('users').doc(userId).set(data); location.reload(); } }; reader.readAsText(input.files[0]); }
+        
+        function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('landscape');
+            doc.setFontSize(18);
+            doc.text("REPORT DETTAGLIATO FINANZE PRO", 14, 15);
+            doc.setFontSize(9);
+            doc.text(`Generato il: ${new Date().toLocaleString('it-IT')}`, 14, 22);
+
+            const headers = [['DATA', 'BENEFICIARIO', 'CAUSALE', 'RATE PAG.', 'SOMMA PAG.', 'RATE RES.', 'SOMMA RES.']];
+            const data = localData.storico.map(x => {
+                const rateRestanti = x.rateTotali - x.ratePagate;
+                return [
+                    x.dataVisuale,
+                    x.beneficiario.toUpperCase(),
+                    (x.causale || "-").toUpperCase(),
+                    `${x.ratePagate}/${x.rateTotali}`,
+                    `€ ${(x.importo * x.ratePagate).toFixed(2)}`,
+                    rateRestanti,
+                    `€ ${(x.importo * rateRestanti).toFixed(2)}`
+                ];
+            });
+
+            doc.autoTable({
+                startY: 28, head: headers, body: data, theme: 'striped',
+                headStyles: { fillColor: [30, 41, 59], fontSize: 8, halign: 'center' },
+                styles: { fontSize: 7, cellPadding: 2, valign: 'middle' },
+                columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 45 }, 2: { cellWidth: 60 }, 3: { halign: 'center' }, 4: { halign: 'right' }, 5: { halign: 'center' }, 6: { halign: 'right' } }
+            });
+
+            const totaleResiduoComplessivo = localData.storico.reduce((acc, x) => acc + ((x.rateTotali - x.ratePagate) * x.importo), 0);
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'bold');
+            doc.text(`TOTALE DEBITO RESIDUO COMPLESSIVO: € ${totaleResiduoComplessivo.toLocaleString('it-IT', {minimumFractionDigits:2})}`, 14, doc.lastAutoTable.finalY + 10);
+            doc.save(`Report_Finanze_PRO_${new Date().toISOString().slice(0,10)}.pdf`);
+        }
+
+        // --- REGISTRAZIONE SERVICE WORKER PER PWA ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('PWA: Service Worker registrato!'))
+                    .catch(err => console.log('PWA: Errore registrazione', err));
+            });
+        }
+    </script>
+</body>
+</html>
