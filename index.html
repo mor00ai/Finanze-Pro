@@ -200,63 +200,44 @@
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth(), db = firebase.firestore();
 
-        let userId = null, localData = { config: { capitale: 0 }, storico: [] };
+        let userId = null;
+        let localData = { config: { capitale: 0 }, storico: [] };
         const MACRO_PWD = "PRO2026";
         let currentAutoFillData = null;
 
+        // Gestione Visualizzazione Bottone Registrazione
         document.getElementById('app-title-trigger').addEventListener('click', () => {
             if(prompt("Codice Amministratore:") === MACRO_PWD) document.getElementById('btn-register-hidden').classList.remove('hidden');
         });
 
-        // --- LOGICA SINCRONIZZAZIONE BLINDATA ---
-auth.onAuthStateChanged(user => {
-    if (user) {
-        userId = user.uid; // ID Unico dell'utente
-        
-        // Nasconde login e mostra l'app
-        document.getElementById('auth-view').classList.add('hidden');
-        document.getElementById('app-view').classList.remove('hidden');
+        // --- MOTORE DI ACCESSO E SINCRONIZZAZIONE ---
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                userId = user.uid;
+                document.getElementById('auth-view').classList.add('hidden');
+                document.getElementById('app-view').classList.remove('hidden');
+                
+                // Sincronizzazione Real-time con Firestore
+                db.collection('users').doc(userId).onSnapshot(doc => { 
+                    if (doc.exists) { 
+                        localData = doc.data(); 
+                        renderUI(); 
+                    } else {
+                        // Inizializza nuovo utente se non esiste doc
+                        localData = { config: { capitale: 0 }, storico: [] };
+                        db.collection('users').doc(userId).set(localData);
+                    }
+                }, err => console.error("Errore Snapshot:", err));
 
-        // 1. SINCRONIZZAZIONE IN TEMPO REALE
-        // Questo pezzo dice a Firebase: "Prendi SOLO i dati di questo utente"
-        db.collection('users').doc(userId).onSnapshot(doc => { 
-            if (doc.exists) { 
-                localData = doc.data(); 
-                renderUI(); 
             } else {
-                // Se è un nuovo utente, creiamo la sua cartella privata
-                localData = { config: { capitale: 0 }, storico: [] };
-                db.collection('users').doc(userId).set(localData);
+                userId = null;
+                document.getElementById('auth-view').classList.remove('hidden');
+                document.getElementById('app-view').classList.add('hidden');
             }
-        }, error => {
-            console.error("Errore permessi Firestore: ", error);
-            alert("Errore di accesso ai dati. Controlla le regole di sicurezza.");
-        });
-
-    } else {
-        // Nessun utente loggato
-        userId = null;
-        document.getElementById('auth-view').classList.remove('hidden');
-        document.getElementById('app-view').classList.add('hidden');
-    }
-    lucide.createIcons(); // Ricarica le icone grafiche
-});
-
-// 2. FUNZIONE DI SALVATAGGIO UNIFICATA
-// Chiamala ogni volta che vuoi inviare i dati locali al Cloud
-async function syncToCloud() {
-    if (!userId) return;
-    try {
-        await db.collection('users').doc(userId).set(localData);
-        console.log("Cloud aggiornato!");
-    } catch (err) {
-        console.error("Errore salvataggio:", err);
-    }
-}
-
             lucide.createIcons();
         });
 
+        // --- FUNZIONI UI ---
         function toggleSpeseVarie(val) { document.getElementById('sub-spese-container').classList.toggle('hidden', val !== 'Spese Varie'); }
         function toggleAltroSpec(val) { document.getElementById('input-altro-spec').classList.toggle('hidden', val !== 'Altro'); }
 
@@ -284,6 +265,7 @@ async function syncToCloud() {
         }
 
         function renderUI() {
+            if (!userId) return;
             const search = document.getElementById('search-input').value.toLowerCase().trim();
             const boxDebito = document.getElementById('box-debito');
             
@@ -349,48 +331,10 @@ async function syncToCloud() {
             lucide.createIcons();
         }
 
-        function openDebitoModal() {
-            const search = document.getElementById('search-input').value.toLowerCase().trim();
-            if (search === "") return;
-            const container = document.getElementById('lista-debiti-dettaglio');
-            const filteredData = localData.storico.filter(x => 
-                x.beneficiario.toLowerCase().includes(search) || 
-                (x.causale && x.causale.toLowerCase().includes(search)) ||
-                x.tipo.toLowerCase().includes(search)
-            );
-            const raggruppamentoDebito = {};
-            filteredData.forEach(op => {
-                const key = `${op.beneficiario.toUpperCase().trim()} (${op.tipo.toUpperCase()})`;
-                if (!raggruppamentoDebito[key] || op.id > raggruppamentoDebito[key].id) {
-                    raggruppamentoDebito[key] = {
-                        residuo: (op.rateTotali - op.ratePagate) * op.importo,
-                        pagate: op.ratePagate,
-                        totali: op.rateTotali,
-                        mancanti: op.rateTotali - op.ratePagate
-                    };
-                }
-            });
-            const debitiAttivi = Object.entries(raggruppamentoDebito).filter(([_, v]) => v.residuo > 0);
-            if (debitiAttivi.length === 0) container.innerHTML = '<p class="text-center py-4 italic text-slate-400">Nessun debito attivo per questa ricerca.</p>';
-            else {
-                container.innerHTML = debitiAttivi.map(([name, data]) => `
-                    <div class="bg-slate-50 p-4 rounded-2xl flex justify-between items-center border border-orange-100">
-                        <div class="pr-4">
-                            <p class="font-black text-slate-800 text-[10px] uppercase break-words">${name}</p>
-                            <p class="text-[9px] font-bold text-slate-400 uppercase">Rate: ${data.pagate}/${data.totali} (Mancano ${data.mancanti})</p>
-                        </div>
-                        <div class="text-right whitespace-nowrap">
-                             <p class="text-orange-600 font-black">€ ${data.residuo.toFixed(2)}</p>
-                        </div>
-                    </div>`).join('');
-            }
-            document.getElementById('modal-debito').classList.remove('hidden');
-            lucide.createIcons();
-        }
-
-        function closeDebitoModal() { document.getElementById('modal-debito').classList.add('hidden'); }
-
+        // --- GESTIONE DATI ---
         async function addTransaction() {
+            if (!userId) return alert("Errore: Utente non identificato");
+
             const dInput = document.getElementById('input-date').value;
             const d = dInput ? new Date(dInput) : new Date();
             const mainType = document.getElementById('input-type').value;
@@ -418,11 +362,42 @@ async function syncToCloud() {
                 ratePagate: parseInt(document.getElementById('input-rate-done').value) || 1,
                 rateTotali: parseInt(document.getElementById('input-rate-total').value) || 1
             });
+
             await db.collection('users').doc(userId).set(localData);
             document.getElementById('form-details').removeAttribute('open');
             document.getElementById('input-amount').value = '';
             document.getElementById('input-to').value = '';
             document.getElementById('input-causale').value = '';
+        }
+
+        async function deleteRow(id) { 
+            if(prompt("Conferma Password Operazione:") === MACRO_PWD) { 
+                localData.storico = localData.storico.filter(x => x.id !== id); 
+                await db.collection('users').doc(userId).set(localData); 
+            } 
+        }
+
+        async function saveConfig() { 
+            localData.config.capitale = parseFloat(document.getElementById('conf-capitale').value) || 0; 
+            await db.collection('users').doc(userId).set(localData); 
+            alert("Capitale aggiornato."); 
+        }
+
+        // --- AUTH E BACKUP ---
+        function logout() { auth.signOut(); }
+        
+        async function handleAuth(t) {
+            const e = document.getElementById('email').value, p = document.getElementById('pass').value;
+            if(!e || !p) return alert("Inserisci email e password");
+            try { 
+                t === 'login' ? await auth.signInWithEmailAndPassword(e, p) : await auth.createUserWithEmailAndPassword(e, p); 
+            } catch (err) { alert(err.message); }
+        }
+
+        async function resetPassword() {
+            const email = document.getElementById('email').value;
+            if (!email) return alert("Inserisci l'email per il recupero");
+            try { await auth.sendPasswordResetEmail(email); alert("Email di recupero inviata!"); } catch (err) { alert(err.message); }
         }
 
         async function secureClear(m) {
@@ -435,23 +410,65 @@ async function syncToCloud() {
             location.reload();
         }
 
-        function logout() { auth.signOut(); }
-        async function handleAuth(t) {
-            const e = document.getElementById('email').value, p = document.getElementById('pass').value;
-            if(!e || !p) { alert("Inserisci email e password"); return; }
-            try { t === 'login' ? await auth.signInWithEmailAndPassword(e, p) : await auth.createUserWithEmailAndPassword(e, p); } catch (err) { alert(err.message); }
+        function downloadBackup() { 
+            const blob = new Blob([JSON.stringify(localData, null, 2)], { type: "application/json" }); 
+            const a = document.createElement('a'); 
+            a.href = URL.createObjectURL(blob); 
+            a.download = `Backup_Finanze.json`; 
+            a.click(); 
         }
-        async function resetPassword() {
-            const email = document.getElementById('email').value;
-            if (!email) return alert("Inserisci l'email per il recupero");
-            try { await auth.sendPasswordResetEmail(email); alert("Email di recupero inviata!"); } catch (err) { alert(err.message); }
+
+        function importBackup(input) { 
+            const reader = new FileReader(); 
+            reader.onload = async (e) => { 
+                const data = JSON.parse(e.target.result); 
+                if(data.storico && prompt("Password Importazione:") === MACRO_PWD) { 
+                    await db.collection('users').doc(userId).set(data); 
+                    location.reload(); 
+                } 
+            }; 
+            reader.readAsText(input.files[0]); 
         }
+
+        // --- UTILITY MODAL DEBITO ---
+        function openDebitoModal() {
+            const search = document.getElementById('search-input').value.toLowerCase().trim();
+            if (search === "") return;
+            const container = document.getElementById('lista-debiti-dettaglio');
+            const filteredData = localData.storico.filter(x => 
+                x.beneficiario.toLowerCase().includes(search) || 
+                (x.causale && x.causale.toLowerCase().includes(search)) ||
+                x.tipo.toLowerCase().includes(search)
+            );
+            const raggruppamentoDebito = {};
+            filteredData.forEach(op => {
+                const key = `${op.beneficiario.toUpperCase().trim()} (${op.tipo.toUpperCase()})`;
+                if (!raggruppamentoDebito[key] || op.id > raggruppamentoDebito[key].id) {
+                    raggruppamentoDebito[key] = {
+                        residuo: (op.rateTotali - op.ratePagate) * op.importo,
+                        pagate: op.ratePagate,
+                        totali: op.rateTotali,
+                        mancanti: op.rateTotali - op.ratePagate
+                    };
+                }
+            });
+            const debitiAttivi = Object.entries(raggruppamentoDebito).filter(([_, v]) => v.residuo > 0);
+            if (debitiAttivi.length === 0) container.innerHTML = '<p class="text-center py-4 italic text-slate-400">Nessun debito attivo.</p>';
+            else {
+                container.innerHTML = debitiAttivi.map(([name, data]) => `
+                    <div class="bg-slate-50 p-4 rounded-2xl flex justify-between items-center border border-orange-100">
+                        <div><p class="font-black text-slate-800 text-[10px] uppercase">${name}</p>
+                        <p class="text-[9px] font-bold text-slate-400">Rate: ${data.pagate}/${data.totali}</p></div>
+                        <p class="text-orange-600 font-black">€ ${data.residuo.toFixed(2)}</p>
+                    </div>`).join('');
+            }
+            document.getElementById('modal-debito').classList.remove('hidden');
+            lucide.createIcons();
+        }
+        function closeDebitoModal() { document.getElementById('modal-debito').classList.add('hidden'); }
         function initFormTime() { const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); document.getElementById('input-date').value = now.toISOString().slice(0,16); }
-        async function deleteRow(id) { if(prompt("Conferma Password Operazione:") === MACRO_PWD) { localData.storico = localData.storico.filter(x => x.id !== id); await db.collection('users').doc(userId).set(localData); } }
-        async function saveConfig() { localData.config.capitale = parseFloat(document.getElementById('conf-capitale').value) || 0; await db.collection('users').doc(userId).set(localData); alert("Capitale aggiornato."); }
-        function downloadBackup() { const blob = new Blob([JSON.stringify(localData, null, 2)], { type: "application/json" }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Backup_Finanze.json`; a.click(); }
-        function importBackup(input) { const reader = new FileReader(); reader.onload = async (e) => { const data = JSON.parse(e.target.result); if(data.storico && prompt("Password Importazione:") === MACRO_PWD) { await db.collection('users').doc(userId).set(data); location.reload(); } }; reader.readAsText(input.files[0]); }
-        
+
+        // --- ESPORTAZIONE PDF FINALE ---
         function exportToPDF() {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('landscape');
@@ -483,22 +500,14 @@ async function syncToCloud() {
 
             const totaleResiduoComplessivo = localData.storico.reduce((acc, x) => acc + ((x.rateTotali - x.ratePagate) * x.importo), 0);
             doc.setFontSize(10);
-            doc.setFont(undefined, 'bold');
-            doc.text(`TOTALE DEBITO RESIDUO COMPLESSIVO: € ${totaleResiduoComplessivo.toLocaleString('it-IT', {minimumFractionDigits:2})}`, 14, doc.lastAutoTable.finalY + 10);
-            doc.save(`Report_Finanze_PRO_${new Date().toISOString().slice(0,10)}.pdf`);
-        }
-
-        // --- REGISTRAZIONE SERVICE WORKER PER PWA ---
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('PWA: Service Worker registrato!'))
-                    .catch(err => console.log('PWA: Errore registrazione', err));
-            });
+            doc.text(`Totale Debito Residuo Complessivo: € ${totaleResiduoComplessivo.toFixed(2)}`, 14, doc.lastAutoTable.finalY + 10);
+            
+            doc.save('Report_FinanzePro.pdf');
         }
     </script>
 </body>
 </html>
+
 
 
 
