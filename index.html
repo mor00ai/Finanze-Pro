@@ -189,16 +189,14 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <script>
-        inserite da qui
         const firebaseConfig = {
             apiKey: "AIzaSyB643qHcFEqfDEacGI6r0wpiQ84IHdzTg4",
             authDomain: "gestione-s-pro-ee3a1.firebaseapp.com",
-            projectId:"gestione-s-pro-ee3a1",
+            projectId: "gestione-s-pro-ee3a1",
             storageBucket: "gestione-s-pro-ee3a1.firebasestorage.app",
-            messagingSenderId:"884336598623",
-            appId:"1:884336598623:web:42cf9ba18f701e3af305ea"
+            messagingSenderId: "884336598623",
+            appId: "1:884336598623:web:42cf9ba18f701e3af305ea"
         };
-        fino qui
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth(), db = firebase.firestore();
 
@@ -210,16 +208,52 @@
             if(prompt("Codice Amministratore:") === MACRO_PWD) document.getElementById('btn-register-hidden').classList.remove('hidden');
         });
 
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                userId = user.uid;
-                document.getElementById('auth-view').classList.add('hidden');
-                document.getElementById('app-view').classList.remove('hidden');
-                db.collection('users').doc(userId).onSnapshot(doc => { if (doc.exists) { localData = doc.data(); renderUI(); } });
+        // --- LOGICA SINCRONIZZAZIONE BLINDATA ---
+auth.onAuthStateChanged(user => {
+    if (user) {
+        userId = user.uid; // ID Unico dell'utente
+        
+        // Nasconde login e mostra l'app
+        document.getElementById('auth-view').classList.add('hidden');
+        document.getElementById('app-view').classList.remove('hidden');
+
+        // 1. SINCRONIZZAZIONE IN TEMPO REALE
+        // Questo pezzo dice a Firebase: "Prendi SOLO i dati di questo utente"
+        db.collection('users').doc(userId).onSnapshot(doc => { 
+            if (doc.exists) { 
+                localData = doc.data(); 
+                renderUI(); 
             } else {
-                document.getElementById('auth-view').classList.remove('hidden');
-                document.getElementById('app-view').classList.add('hidden');
+                // Se è un nuovo utente, creiamo la sua cartella privata
+                localData = { config: { capitale: 0 }, storico: [] };
+                db.collection('users').doc(userId).set(localData);
             }
+        }, error => {
+            console.error("Errore permessi Firestore: ", error);
+            alert("Errore di accesso ai dati. Controlla le regole di sicurezza.");
+        });
+
+    } else {
+        // Nessun utente loggato
+        userId = null;
+        document.getElementById('auth-view').classList.remove('hidden');
+        document.getElementById('app-view').classList.add('hidden');
+    }
+    lucide.createIcons(); // Ricarica le icone grafiche
+});
+
+// 2. FUNZIONE DI SALVATAGGIO UNIFICATA
+// Chiamala ogni volta che vuoi inviare i dati locali al Cloud
+async function syncToCloud() {
+    if (!userId) return;
+    try {
+        await db.collection('users').doc(userId).set(localData);
+        console.log("Cloud aggiornato!");
+    } catch (err) {
+        console.error("Errore salvataggio:", err);
+    }
+}
+
             lucide.createIcons();
         });
 
@@ -464,7 +498,6 @@
         }
     </script>
 </body>
-
 </html>
 
 
