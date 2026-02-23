@@ -189,7 +189,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <script>
-        // CONFIGURAZIONE FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyB643qHcFEqfDEacGI6r0wpiQ84IHdzTg4",
             authDomain: "gestione-s-pro-ee3a1.firebaseapp.com",
@@ -198,47 +197,66 @@
             messagingSenderId: "884336598623",
             appId: "1:884336598623:web:42cf9ba18f701e3af305ea"
         };
-
         firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
+        const auth = firebase.auth(), db = firebase.firestore();
 
-        let userId = null;
-        let localData = { config: { capitale: 0 }, storico: [] };
+        let userId = null, localData = { config: { capitale: 0 }, storico: [] };
         const MACRO_PWD = "PRO2026";
         let currentAutoFillData = null;
 
-        // LOGICA DI ACCESSO E CARICAMENTO DATI PRIVATI
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                userId = user.uid;
-                document.getElementById('auth-view').classList.add('hidden');
-                document.getElementById('app-view').classList.remove('hidden');
-                // Sincronizzazione in tempo reale col documento privato dell'utente
-                db.collection('users').doc(userId).onSnapshot(doc => { 
-                    if (doc.exists) { 
-                        localData = doc.data(); 
-                        renderUI(); 
-                    } else {
-                        // Se primo accesso, creiamo la struttura
-                        localData = { config: { capitale: 0 }, storico: [] };
-                        db.collection('users').doc(userId).set(localData);
-                    }
-                });
-            } else {
-                userId = null;
-                document.getElementById('auth-view').classList.remove('hidden');
-                document.getElementById('app-view').classList.add('hidden');
-            }
-            lucide.createIcons();
-        });
-
-        // Trigger registrazione (click sul titolo + pwd)
         document.getElementById('app-title-trigger').addEventListener('click', () => {
             if(prompt("Codice Amministratore:") === MACRO_PWD) document.getElementById('btn-register-hidden').classList.remove('hidden');
         });
 
-        // GESTIONE UI MOVIMENTI
+        // --- LOGICA SINCRONIZZAZIONE BLINDATA ---
+auth.onAuthStateChanged(user => {
+    if (user) {
+        userId = user.uid; // ID Unico dell'utente
+        
+        // Nasconde login e mostra l'app
+        document.getElementById('auth-view').classList.add('hidden');
+        document.getElementById('app-view').classList.remove('hidden');
+
+        // 1. SINCRONIZZAZIONE IN TEMPO REALE
+        // Questo pezzo dice a Firebase: "Prendi SOLO i dati di questo utente"
+        db.collection('users').doc(userId).onSnapshot(doc => { 
+            if (doc.exists) { 
+                localData = doc.data(); 
+                renderUI(); 
+            } else {
+                // Se è un nuovo utente, creiamo la sua cartella privata
+                localData = { config: { capitale: 0 }, storico: [] };
+                db.collection('users').doc(userId).set(localData);
+            }
+        }, error => {
+            console.error("Errore permessi Firestore: ", error);
+            alert("Errore di accesso ai dati. Controlla le regole di sicurezza.");
+        });
+
+    } else {
+        // Nessun utente loggato
+        userId = null;
+        document.getElementById('auth-view').classList.remove('hidden');
+        document.getElementById('app-view').classList.add('hidden');
+    }
+    lucide.createIcons(); // Ricarica le icone grafiche
+});
+
+// 2. FUNZIONE DI SALVATAGGIO UNIFICATA
+// Chiamala ogni volta che vuoi inviare i dati locali al Cloud
+async function syncToCloud() {
+    if (!userId) return;
+    try {
+        await db.collection('users').doc(userId).set(localData);
+        console.log("Cloud aggiornato!");
+    } catch (err) {
+        console.error("Errore salvataggio:", err);
+    }
+}
+
+            lucide.createIcons();
+        });
+
         function toggleSpeseVarie(val) { document.getElementById('sub-spese-container').classList.toggle('hidden', val !== 'Spese Varie'); }
         function toggleAltroSpec(val) { document.getElementById('input-altro-spec').classList.toggle('hidden', val !== 'Altro'); }
 
@@ -331,7 +349,6 @@
             lucide.createIcons();
         }
 
-        // MODALE DEBITO
         function openDebitoModal() {
             const search = document.getElementById('search-input').value.toLowerCase().trim();
             if (search === "") return;
@@ -370,9 +387,9 @@
             document.getElementById('modal-debito').classList.remove('hidden');
             lucide.createIcons();
         }
+
         function closeDebitoModal() { document.getElementById('modal-debito').classList.add('hidden'); }
 
-        // OPERAZIONI CRUD & CLOUD
         async function addTransaction() {
             const dInput = document.getElementById('input-date').value;
             const d = dInput ? new Date(dInput) : new Date();
@@ -435,7 +452,6 @@
         function downloadBackup() { const blob = new Blob([JSON.stringify(localData, null, 2)], { type: "application/json" }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Backup_Finanze.json`; a.click(); }
         function importBackup(input) { const reader = new FileReader(); reader.onload = async (e) => { const data = JSON.parse(e.target.result); if(data.storico && prompt("Password Importazione:") === MACRO_PWD) { await db.collection('users').doc(userId).set(data); location.reload(); } }; reader.readAsText(input.files[0]); }
         
-        // EXPORT PDF
         function exportToPDF() {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('landscape');
@@ -466,14 +482,13 @@
             });
 
             const totaleResiduoComplessivo = localData.storico.reduce((acc, x) => acc + ((x.rateTotali - x.ratePagate) * x.importo), 0);
-            
             doc.setFontSize(10);
             doc.setFont(undefined, 'bold');
             doc.text(`TOTALE DEBITO RESIDUO COMPLESSIVO: € ${totaleResiduoComplessivo.toLocaleString('it-IT', {minimumFractionDigits:2})}`, 14, doc.lastAutoTable.finalY + 10);
             doc.save(`Report_Finanze_PRO_${new Date().toISOString().slice(0,10)}.pdf`);
         }
 
-        // SERVICE WORKER PWA
+        // --- REGISTRAZIONE SERVICE WORKER PER PWA ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
@@ -484,4 +499,5 @@
     </script>
 </body>
 </html>
+
 
