@@ -306,12 +306,25 @@
         // --- ALTRE LOGICHE ---
         async function deleteRow(id) { if(prompt("Password Admin:") === MACRO_PWD) { localData.storico = localData.storico.filter(x => x.id !== id); await db.collection('users').doc(userId).set(localData); } }
         async function saveConfig() { localData.config.capitale = parseFloat(document.getElementById('conf-capitale').value) || 0; await db.collection('users').doc(userId).set(localData); alert("Capitale salvato!"); }
-        
+        // Questa gestisce l'accesso e la registrazione (LASCIALA)
         async function handleAuth(t) {
             const e = document.getElementById('email').value, p = document.getElementById('pass').value;
             try { t === 'login' ? await auth.signInWithEmailAndPassword(e, p) : await auth.createUserWithEmailAndPassword(e, p); } catch (err) { alert(err.message); }
         }
-
+        // Questa è quella che abbiamo aggiunto ora per il ripristino (INCOLLALA QUI)
+        async function resetPassword() {
+        const email = document.getElementById('email').value;
+        if (!email) {
+        alert("Inserisci la tua email nel campo sopra per ricevere il link di ripristino.");
+        return;
+     }
+    try {
+        await auth.sendPasswordResetEmail(email);
+        alert("Email di ripristino inviata! Controlla la tua posta (anche in Spam).");
+    } catch (err) {
+        alert("Errore: " + err.message);
+    }
+}
         function logout() { auth.signOut(); }
         function initFormTime() { const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); document.getElementById('input-date').value = now.toISOString().slice(0,16); }
         function toggleSpeseVarie(v) { document.getElementById('sub-spese-container').classList.toggle('hidden', v !== 'Spese Varie'); }
@@ -377,6 +390,7 @@
     </script>
 </body>
 </html>
+
 
 
 
