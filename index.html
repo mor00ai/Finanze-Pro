@@ -425,9 +425,16 @@
 
         document.getElementById('app-title-trigger').onclick = () => { if(prompt("Admin PWD:") === MACRO_PWD) document.getElementById('btn-register-hidden').classList.remove('hidden'); };
         async function secureClear(m) { if(prompt("Admin PWD:") === MACRO_PWD) { await db.collection('users').doc(userId).set({config:{capitale:0}, storico:[]}); location.reload(); } }
+        // Funzione per il pulsante Reset Locale
+        function clearLocalOnly() {
+            if(confirm("Vuoi ricaricare la vista locale dal database?")) {
+                location.reload();
+            }
+        }
     </script>
 </body>
 </html>
+
 
 
 
