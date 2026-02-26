@@ -146,10 +146,11 @@
                             <button onclick="saveConfig()" class="px-6 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs active-scale">Salva</button>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <button onclick="downloadBackup()" class="p-4 bg-blue-50 text-blue-600 rounded-3xl text-[10px] font-black uppercase flex flex-col items-center gap-2"><i data-lucide="download"></i> Backup</button>
-                        <button onclick="secureClear('all')" class="p-4 bg-rose-50 text-rose-600 rounded-3xl text-[10px] font-black uppercase flex flex-col items-center gap-2"><i data-lucide="trash-2"></i> Reset Cloud</button>
-                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                    <button onclick="downloadBackup()" class="p-4 bg-blue-50 text-blue-600 rounded-3xl text-[10px] font-black uppercase flex flex-col items-center gap-2"><i data-lucide="download"></i> Backup</button>
+                    <button onclick="clearLocalOnly()" class="p-4 bg-amber-50 text-amber-600 rounded-3xl text-[10px] font-black uppercase flex flex-col items-center gap-2 active-scale"><i data-lucide="refresh-cw"></i> Reset</button>
+                   <button onclick="secureClear('all')" class="p-4 bg-rose-50 text-rose-600 rounded-3xl text-[10px] font-black uppercase flex flex-col items-center gap-2"><i data-lucide="trash-2"></i> Cloud</button>
+                   </div>
                 </div>
             </details>
         </footer>
@@ -434,6 +435,7 @@
     </script>
 </body>
 </html>
+
 
 
 
