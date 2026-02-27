@@ -146,11 +146,17 @@
                             <button onclick="saveConfig()" class="px-6 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs active-scale">Salva</button>
                         </div>
                     </div>
-                    <div class="grid grid-cols-3 gap-3">
-                    <button onclick="downloadBackup()" class="p-4 bg-blue-50 text-blue-600 rounded-3xl text-[10px] font-black uppercase flex flex-col items-center gap-2"><i data-lucide="download"></i> Backup</button>
-                    <button onclick="clearLocalOnly()" class="p-4 bg-amber-50 text-amber-600 rounded-3xl text-[10px] font-black uppercase flex flex-col items-center gap-2 active-scale"><i data-lucide="refresh-cw"></i> Reset</button>
-                   <button onclick="secureClear('all')" class="p-4 bg-rose-50 text-rose-600 rounded-3xl text-[10px] font-black uppercase flex flex-col items-center gap-2"><i data-lucide="trash-2"></i> Cloud</button>
-                   </div>
+                    <div class="grid grid-cols-3 gap-2 mt-4">
+                   <button onclick="downloadBackup()" class="p-4 bg-blue-50 text-blue-600 rounded-3xl text-[9px] font-black uppercase flex flex-col items-center gap-2 active-scale">
+                   <i data-lucide="download" class="w-5 h-5"></i> Backup
+                   </button>
+                  <button onclick="clearLocalOnly()" class="p-4 bg-amber-50 text-amber-600 rounded-3xl text-[9px] font-black uppercase flex flex-col items-center gap-2 active-scale">
+                   <i data-lucide="eraser" class="w-5 h-5"></i> Pulisci App
+                   </button>
+                 <button onclick="secureClear('all')" class="p-4 bg-rose-50 text-rose-600 rounded-3xl text-[9px] font-black uppercase flex flex-col items-center gap-2 active-scale">
+                 <i data-lucide="trash-2" class="w-5 h-5"></i> Reset Cloud
+                  </button>
+                  </div>
                 </div>
             </details>
         </footer>
@@ -427,14 +433,36 @@
         document.getElementById('app-title-trigger').onclick = () => { if(prompt("Admin PWD:") === MACRO_PWD) document.getElementById('btn-register-hidden').classList.remove('hidden'); };
         async function secureClear(m) { if(prompt("Admin PWD:") === MACRO_PWD) { await db.collection('users').doc(userId).set({config:{capitale:0}, storico:[]}); location.reload(); } }
         // Funzione per il pulsante Reset Locale
-        function clearLocalOnly() {
-            if(confirm("Vuoi ricaricare la vista locale dal database?")) {
-                location.reload();
-            }
-        }
+        // --- 1. FUNZIONE BACKUP ---
+// Crea un file .json con tutti i tuoi dati e lo fa scaricare
+function downloadBackup() {
+    if (!localData || !localData.storico || localData.storico.length === 0) {
+        alert("Non ci sono dati da salvare nel backup!");
+        return;
+    }
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(localData));
+    const a = document.createElement('a');
+    a.href = dataStr;
+    a.download = "Backup_FinanzePro_" + new Date().toLocaleDateString('it-IT').replace(/\//g, '-') + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+// --- 2. FUNZIONE ELIMINA LOCALE ---
+// Svuota la schermata ma NON tocca il database online
+function clearLocalOnly() {
+    if(confirm("Vuoi svuotare i dati visibili in questa schermata?\n\nTranquillo: i dati sul Cloud di Firebase NON verranno cancellati. Basterà ricaricare la pagina per rivederli.")) {
+        // Svuota la memoria temporanea del browser
+        localData = { config: { capitale: 0 }, storico: [] };
+        // Aggiorna la grafica (che ora sarà vuota)
+        renderUI();
+    }
+}
     </script>
 </body>
 </html>
+
 
 
 
