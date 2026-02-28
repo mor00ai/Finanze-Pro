@@ -146,17 +146,21 @@
                             <button onclick="saveConfig()" class="px-6 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs active-scale">Salva</button>
                         </div>
                     </div>
-                    <div class="grid grid-cols-3 gap-2 mt-4">
-                   <button onclick="downloadBackup()" class="p-4 bg-blue-50 text-blue-600 rounded-3xl text-[9px] font-black uppercase flex flex-col items-center gap-2 active-scale">
-                   <i data-lucide="download" class="w-5 h-5"></i> Backup
+                   <input type="file" id="restoreInput" style="display: none;" onchange="restoreBackup(this)">
+                 <div class="grid grid-cols-2 gap-3 mt-4">
+        <button onclick="downloadBackup()" class="p-4 bg-blue-50 text-blue-600 rounded-2xl text-[10px] font-black uppercase flex flex-col items-center gap-2 active-scale">
+        <i data-lucide="download" class="w-5 h-5"></i> Backup
+    </button>
+        <button onclick="document.getElementById('restoreInput').click()" class="p-4 bg-emerald-50 text-emerald-600 rounded-2xl text-[10px] font-black uppercase flex flex-col items-center gap-2 active-scale">
+        <i data-lucide="upload" class="w-5 h-5"></i> Ripristina
+    </button>
+        <button onclick="clearLocalOnly()" class="p-4 bg-amber-50 text-amber-600 rounded-2xl text-[10px] font-black uppercase flex flex-col items-center gap-2 active-scale">
+        <i data-lucide="eraser" class="w-5 h-5"></i> Pulisci App
+    </button>
+        <button onclick="secureClear('all')" class="p-4 bg-rose-50 text-rose-600 rounded-2xl text-[10px] font-black uppercase flex flex-col items-center gap-2 active-scale">
+        <i data-lucide="trash-2" class="w-5 h-5"></i> Reset Cloud
                    </button>
-                  <button onclick="clearLocalOnly()" class="p-4 bg-amber-50 text-amber-600 rounded-3xl text-[9px] font-black uppercase flex flex-col items-center gap-2 active-scale">
-                   <i data-lucide="eraser" class="w-5 h-5"></i> Pulisci App
-                   </button>
-                 <button onclick="secureClear('all')" class="p-4 bg-rose-50 text-rose-600 rounded-3xl text-[9px] font-black uppercase flex flex-col items-center gap-2 active-scale">
-                 <i data-lucide="trash-2" class="w-5 h-5"></i> Reset Cloud
-                  </button>
-                  </div>
+                 </div>
                 </div>
             </details>
         </footer>
@@ -459,9 +463,39 @@ function clearLocalOnly() {
         renderUI();
     }
 }
+        // --- 3. FUNZIONE RIPRISTINA (CARICA IL FILE) ---
+function restoreBackup(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+                        // Controllo se il file è valido (deve avere config e storico)
+            if (data.storico && data.config) {
+                if(confirm("ATTENZIONE: Stai per sovrascrivere i dati attuali con quelli del backup. Continuare?")) {   
+                // 1. Carica i dati in memoria
+                    localData = data;
+                 // 2. Salva subito su Firebase (Cloud)
+                    await db.collection('users').doc(userId).set(localData);
+                    // 3. Rinfresca l'interfaccia
+                    renderUI();
+                    alert("Backup ripristinato con successo!");
+                }
+            } else {
+                alert("Il file selezionato non è un backup valido.");
+            }
+        } catch (err) {
+            alert("Errore nel caricamento del file: " + err.message);
+        }
+    };
+    reader.readAsText(file);
+    input.value = ''; // Resetta l'input
+}
     </script>
 </body>
 </html>
+
 
 
 
